@@ -49,7 +49,7 @@ func main() {
 	go func() {
 		for range time.Tick(5 * time.Second) {
 			SecNum++
-			fmt.Printf("并发数：%d, 请求次数：%d,平均响应时间：%s,成功次数：%d,失败次数：%d,失败率: %d\n",
+			fmt.Printf("并发数：%d, 请求次数：%d,平均响应时间：%s,成功次数：%d,失败次数：%d\n",
 				len(controlNum), SuccessNum+FailNum, RTNum/(time.Duration(SecNum)*time.Second), SuccessNum, FailNum)
 		}
 	}()
