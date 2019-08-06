@@ -2,44 +2,73 @@ package main
 
 import (
     . "fmt"
+    "log"
     "math/rand"
     "net/http"
+    _ "net/http/pprof"
+    "runtime/debug"
+    "strconv"
+
     "runtime"
     "sync"
     "sync/atomic"
     "time"
 )
-//var filename = "txt"
+
 var dbChan chan int
 var writecount int32
 var readcount int32
 var Lock sync.RWMutex
 var Zero = false
+var cpusize int
 func makeBuffer() int {
     return rand.Intn(5000000000000)
 }
 
 func write(ch chan  int){
-    for i :=0;i <500;i++{
+    Loop:for i :=0;i <500;i++{
         re := makeBuffer()
-        //fmt.Println(re)
-        ch <- re
-        Lock.Lock()
-        atomic.AddInt32(&writecount,1)
-        Lock.Unlock()
-
+        select {
+        case ch <- re:
+            Lock.Lock()
+            atomic.AddInt32(&writecount, 1)
+            Lock.Unlock()
+        case <-time.After(200 * time.Millisecond):
+            Println("timed out")
+            goto Loop
+        }
     }
 }
 
 func read(ch chan  int){
-    for i :=0;i <500;i++{
-        <- ch
-        Lock.Lock()
-        atomic.AddInt32(&readcount,1)
-        Lock.Unlock()
+    Loop:for i :=0;i <500;i++{
+        select {
+        case _, _ = <-dbChan:
+            Lock.Lock()
+            atomic.AddInt32(&readcount, 1)
+            Lock.Unlock()
+        case <-time.After(200 * time.Millisecond):
+            Println("timed out")
+            goto Loop
+        }
     }
 }
-
+func cpu(cpusize){
+    num := runtime.NumCPU()
+    cpunum := num / cpusize
+    runtime.GOMAXPROCS(cpunum)
+    for i := 0; i < 102400; i++ {
+        go func() {
+            for {
+                t := time.NewTimer(time.Duration(1) * time.Second)
+                select {
+                case <-time.After(time.Microsecond):
+                }
+                t.Stop()
+            }
+        }()
+    }
+}
 
 func writeHandler(w http.ResponseWriter,r *http.Request) {
     go write(dbChan)
@@ -47,7 +76,31 @@ func writeHandler(w http.ResponseWriter,r *http.Request) {
 func readHandler(w http.ResponseWriter,r *http.Request) {
     go read(dbChan)
 }
+func closeHandler(w http.ResponseWriter,r *http.Request) {
+    close(dbChan)
+}
+func cpuHandler(w http.ResponseWriter,r *http.Request){
+    if  len(r.URL.Query()) < 1 {
+        log.Println("Url Param 'key' is missing")
+        return
+    }
 
+    for k, v := range r.URL.Query() {
+         if k == "cpuset" {
+             value, err := strconv.Atoi(v[0])
+             if err != nil {
+             }else {
+                 cpusize = value
+             }
+             cpu(cpusize)
+        }else{
+            Printf("参数不正确，http://hostname:port/cpu?cpuset=1")
+         }
+
+    }
+
+
+}
 func status(m runtime.MemStats) string{
 
     return Sprint("%d,%d,%d,%d\n", m.HeapSys,  m.HeapAlloc,m.HeapIdle, m.HeapReleased, )
@@ -69,18 +122,26 @@ func timer() {
 }
 
 func gcHandler(w http.ResponseWriter,r *http.Request){
+    //dbChan = nil
     runtime.GC()
 
 }
 
+func debuggcHandler(w http.ResponseWriter,r *http.Request){
+    //dbChan = nil
+    debug.FreeOSMemory()
 
+}
 
 func main(){
     dbChan = make(chan int,90000000)
 
     http.HandleFunc("/write", writeHandler)
+    http.HandleFunc("/close", closeHandler)
     http.HandleFunc("/read", readHandler)
     http.HandleFunc("/gc", gcHandler)
+    http.HandleFunc("/debuggc", debuggcHandler)
+    http.HandleFunc("/cpu", cpuHandler)
     go timer()
     http.ListenAndServe(":8080", nil)
 
