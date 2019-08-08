@@ -20,13 +20,14 @@ var writecount int32
 var readcount int32
 var Lock sync.RWMutex
 var Zero = false
-var cpusize int
+var cpusize int = 5
+var t1 = time.NewTimer(time.Millisecond * 5)
 func makeBuffer() int {
     return rand.Intn(5000000000000)
 }
 
 func write(ch chan  int){
-    Loop:for i :=0;i <500;i++{
+    for i :=0;i <500;i++{
         re := makeBuffer()
         select {
         case ch <- re:
@@ -38,26 +39,30 @@ func write(ch chan  int){
             goto Loop
         }
     }
+Loop:
 }
 
 func read(ch chan  int){
-    Loop:for i :=0;i <500;i++{
+    for i :=0;i <500;i++{
         select {
         case _, _ = <-dbChan:
             Lock.Lock()
             atomic.AddInt32(&readcount, 1)
             Lock.Unlock()
-        case <-time.After(200 * time.Millisecond):
+        case <-t1.C:
             Println("timed out")
+            t1.Reset(200*time.Millisecond)
             goto Loop
         }
     }
+Loop:
 }
-func cpu(cpusize){
+func cpu(cpusize int){
     num := runtime.NumCPU()
     cpunum := num / cpusize
     runtime.GOMAXPROCS(cpunum)
-    for i := 0; i < 102400; i++ {
+    for i := 0; i < 1024; i++ {
+        Println("cpuset")
         go func() {
             for {
                 t := time.NewTimer(time.Duration(1) * time.Second)
@@ -84,22 +89,21 @@ func cpuHandler(w http.ResponseWriter,r *http.Request){
         log.Println("Url Param 'key' is missing")
         return
     }
-
     for k, v := range r.URL.Query() {
          if k == "cpuset" {
+
              value, err := strconv.Atoi(v[0])
              if err != nil {
+                 Println("can't convert to int")
              }else {
+                 Printf("type:%T value:%#v\n", v[0], v[0])
                  cpusize = value
              }
              cpu(cpusize)
         }else{
             Printf("参数不正确，http://hostname:port/cpu?cpuset=1")
          }
-
     }
-
-
 }
 func status(m runtime.MemStats) string{
 
@@ -116,7 +120,7 @@ func timer() {
             Lock.RLock()
             Printf("%s,lenchan:%d,writecount:%d,readcount:%d\n",title,len(dbChan),writecount,readcount)
             Lock.RUnlock()
-
+            //cpu2(cpusize / 5)
         }
     }(ticker1)
 }
@@ -132,6 +136,8 @@ func debuggcHandler(w http.ResponseWriter,r *http.Request){
     debug.FreeOSMemory()
 
 }
+
+
 
 func main(){
     dbChan = make(chan int,90000000)
