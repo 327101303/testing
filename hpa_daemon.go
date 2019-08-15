@@ -6,9 +6,11 @@ import (
     "math/rand"
     "net/http"
     _ "net/http/pprof"
+    "os"
     "runtime/debug"
     "strconv"
 
+    "github.com/327101303/mylogger"
     "runtime"
     "sync"
     "sync/atomic"
@@ -22,6 +24,8 @@ var Lock sync.RWMutex
 var Zero = false
 var cpusize int = 5
 var t1 = time.NewTimer(time.Millisecond * 5)
+var logger  mylogger.Logger
+var monitLogger mylogger.Logger
 func makeBuffer() int {
     return rand.Intn(5000000000000)
 }
@@ -137,10 +141,64 @@ func debuggcHandler(w http.ResponseWriter,r *http.Request){
 
 }
 
+// 判断文件夹是否存在
+func PathExists(path string) (bool, error) {
+    _, err := os.Stat(path)
+    if err == nil {
+        return true, nil
+    }
+    if os.IsNotExist(err) {
+        return false, nil
+    }
+    return false, err
+}
+
+func mkDir(dirPath string){
+
+    exist, err := PathExists(dirPath)
+    if err != nil {
+        Printf("get dir error![%v]\n", err)
+        return
+    }
+
+    if exist {
+        Printf("has dir![%v]\n", dirPath)
+    } else {
+        Printf("no dir![%v]\n", dirPath)
+        // 创建文件夹
+        err := os.Mkdir(dirPath, os.ModePerm)
+        if err != nil {
+            Printf("mkdir failed![%v]\n", err)
+        } else {
+            Printf("mkdir success!\n")
+        }
+    }
+
+}
+
+
+func logHandler(w http.ResponseWriter,r *http.Request){
+    //var logger = mylogger.NewConsoleLogger("debug")
+    go func() {
+        for i := 0; i < 100; i++ {
+            sb := "管大妈"
+            logger.Debug("%s是个好捧哏", sb)
+            logger.Info("info 这是一条测试的日志")
+            //logger.Error("error 这是一条测试的日志")
+            monitLogger.Debug("123123,1231231,123123,123123")
+        }
+    }()
+}
+
 
 
 func main(){
     dbChan = make(chan int,90000000)
+    mkDir("/app/logs/app/")
+    mkDir("/app/logs/monitor/")
+    logger = mylogger.NewFileLogger("debug","default.log","/app/logs/app/")
+    monitLogger = mylogger.NewFileLogger("debug","default.log","/app/logs/monitor/")
+    defer logger.Close()
 
     http.HandleFunc("/write", writeHandler)
     http.HandleFunc("/close", closeHandler)
@@ -148,6 +206,7 @@ func main(){
     http.HandleFunc("/gc", gcHandler)
     http.HandleFunc("/debuggc", debuggcHandler)
     http.HandleFunc("/cpu", cpuHandler)
+    http.HandleFunc("/log", logHandler)
     go timer()
     http.ListenAndServe(":8080", nil)
 
