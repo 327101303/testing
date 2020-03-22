@@ -11,9 +11,9 @@ import (
 var filename = "txt"
 func tracefile(file,str_content string) {
     fd, _ := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
-    var fd_time = time.Now().Format("2020-01-02 15:04:05");
+    var fd_time = time.Now().Format("2006-01-02 15:04:00");
     fd_content := strings.Join([]string{ str_content, }, "")
-    fmt.Printf(strings.Join([]string{"======", fd_time, "=====", str_content, }, ""))
+    fmt.Printf(strings.Join([]string{fd_time,",", str_content, }, ""))
     buf := []byte(fd_content)
     fd.Write(buf)
     fd.Close()
